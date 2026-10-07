@@ -1,0 +1,22 @@
+{
+  "className": "Tool",
+  "properties": {
+    "CanBeDropped": false,
+    "Grip": [
+      0,
+      -1,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      -1,
+      -1,
+      0,
+      0
+    ],
+    "TextureContent": "http://www.roblox.com/asset/?id=27471616"
+  },
+  "ignoreUnknownInstances": true
+}

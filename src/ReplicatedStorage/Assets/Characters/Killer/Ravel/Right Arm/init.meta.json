@@ -1,0 +1,39 @@
+{
+  "className": "MeshPart",
+  "properties": {
+    "CanCollide": false,
+    "CFrame": [
+      100.6381,
+      107.0295,
+      -551.1292,
+      0,
+      0,
+      1,
+      0,
+      1,
+      0,
+      -1,
+      0,
+      0
+    ],
+    "Color": [
+      117,
+      0,
+      0
+    ],
+    "InitialSize": [
+      1,
+      2,
+      1
+    ],
+    "Material": "Granite",
+    "MeshContent": "rbxassetid://3036366188",
+    "RenderFidelity": "Precise",
+    "Size": [
+      1.1525,
+      2.3051,
+      1.1525
+    ]
+  },
+  "ignoreUnknownInstances": true
+}

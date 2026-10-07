@@ -1,0 +1,35 @@
+{
+  "className": "Seat",
+  "properties": {
+    "Anchored": true,
+    "BackParamA": 0,
+    "BackParamB": 0,
+    "BottomSurface": "Weld",
+    "CFrame": [
+      -4713.2085,
+      -243.8789,
+      2926.9512,
+      0,
+      0,
+      1,
+      0,
+      1,
+      0,
+      -1,
+      0,
+      0
+    ],
+    "FormFactor": "Plate",
+    "FrontParamA": 0,
+    "FrontParamB": 0,
+    "LeftParamA": 0,
+    "LeftParamB": 0,
+    "Size": [
+      3,
+      0.4,
+      4
+    ],
+    "TopSurface": "Smooth"
+  },
+  "ignoreUnknownInstances": true
+}

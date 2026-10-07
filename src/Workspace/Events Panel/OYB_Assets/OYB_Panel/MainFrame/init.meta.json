@@ -1,0 +1,19 @@
+{
+  "className": "Frame",
+  "properties": {
+    "Active": true,
+    "BackgroundColor3": [
+      0.0627,
+      0.0627,
+      0.0863
+    ],
+    "BorderColor3": [
+      0,
+      0,
+      0
+    ],
+    "BorderSizePixel": 6,
+    "Visible": false
+  },
+  "ignoreUnknownInstances": true
+}

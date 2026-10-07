@@ -1,0 +1,61 @@
+name: Discord Commit Action
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+
+jobs:
+  send_embed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Select Discord Webhook
+        env:
+          # Load both secrets into the step context
+          HOOK_MAIN: ${{ secrets.WEBHOOK_URL }}
+          HOOK_DEV: ${{ secrets.DEV_WEBHOOK_URL }}
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "USING_WEBHOOK=$HOOK_MAIN" >> $GITHUB_ENV
+          else
+            echo "USING_WEBHOOK=$HOOK_DEV" >> $GITHUB_ENV
+          fi
+
+      - name: Generate Commit List
+        if: github.event_name == 'push'
+        run: |
+          echo "COMMIT_LIST<<EOF" >> $GITHUB_ENV
+          
+          for commit in $(jq -r '.commits[].id' "$GITHUB_EVENT_PATH"); do
+            short=$(echo "$commit" | cut -c1-7)
+            msg=$(git log -1 --pretty=%s "$commit")
+            author=$(git log -1 --pretty=%an "$commit")
+            url="https://github.com/${{ github.repository }}/commit/$commit"
+            author_url="https://github.com/$author"
+
+            echo "[\`$short\`]($url) $msg - [**$author**]($author_url)" >> $GITHUB_ENV
+          done
+          
+          echo "EOF" >> $GITHUB_ENV
+
+      - uses: sarisia/actions-status-discord@v1.15.5
+        with:
+          webhook: ${{ env.USING_WEBHOOK }}
+          url: "https://github.com/CodeBotsStudio/Dysymmetrical"
+          title: "Dysymmetrical Activity Notification"
+          
+          description: |
+            **Commit List**
+            ${{ env.COMMIT_LIST }}
+            
+            **Branch**
+            ${{ github.ref_name }}
+            
+          color: 0x999999
+          nodetail: true

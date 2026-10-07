@@ -1,0 +1,37 @@
+{
+  "className": "Part",
+  "properties": {
+    "Anchored": true,
+    "BottomSurface": "Smooth",
+    "CanCollide": false,
+    "CFrame": [
+      -2006.2328,
+      -336.7788,
+      1251.2261,
+      1,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      1
+    ],
+    "Color": [
+      13,
+      105,
+      172
+    ],
+    "FormFactor": "Symmetric",
+    "Locked": true,
+    "Material": "Foil",
+    "Size": [
+      10,
+      1,
+      10
+    ],
+    "TopSurface": "Smooth"
+  },
+  "ignoreUnknownInstances": true
+}

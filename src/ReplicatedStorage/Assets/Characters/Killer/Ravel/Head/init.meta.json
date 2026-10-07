@@ -1,0 +1,32 @@
+{
+  "className": "UnionOperation",
+  "properties": {
+    "CFrame": [
+      100.6381,
+      108.7583,
+      -549.4004,
+      0,
+      0,
+      1,
+      0,
+      1,
+      0,
+      -1,
+      0,
+      0
+    ],
+    "Color": [
+      117,
+      0,
+      0
+    ],
+    "Material": "Granite",
+    "Size": [
+      1.3485,
+      1.3485,
+      1.3485
+    ],
+    "UsePartColor": true
+  },
+  "ignoreUnknownInstances": true
+}

@@ -1,0 +1,39 @@
+{
+  "className": "Part",
+  "properties": {
+    "Anchored": true,
+    "BackSurface": "Weld",
+    "BottomSurface": "Smooth",
+    "CFrame": [
+      -4715.2085,
+      -219.5789,
+      2877.4512,
+      1,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      1
+    ],
+    "Color": [
+      91,
+      93,
+      105
+    ],
+    "FormFactor": "Custom",
+    "FrontParamA": 0,
+    "FrontParamB": 0,
+    "FrontSurface": "Motor",
+    "FrontSurfaceInput": "Constant",
+    "Size": [
+      2,
+      2,
+      6
+    ],
+    "TopSurface": "Smooth"
+  },
+  "ignoreUnknownInstances": true
+}

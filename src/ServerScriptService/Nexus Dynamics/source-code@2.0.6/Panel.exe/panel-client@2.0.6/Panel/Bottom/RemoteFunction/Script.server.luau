@@ -1,0 +1,3 @@
+script.Parent.OnServerInvoke = function()
+	return true
+end

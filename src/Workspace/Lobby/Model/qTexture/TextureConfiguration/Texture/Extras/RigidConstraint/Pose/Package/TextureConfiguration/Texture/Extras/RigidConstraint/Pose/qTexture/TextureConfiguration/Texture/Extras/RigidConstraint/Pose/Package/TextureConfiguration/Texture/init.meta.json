@@ -1,0 +1,11 @@
+{
+  "className": "AlignPosition",
+  "properties": {
+    "MaxForce": 97460609351680,
+    "Responsiveness": 200
+  },
+  "attributes": {
+    "Texture": "97460612403366"
+  },
+  "ignoreUnknownInstances": true
+}

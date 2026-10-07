@@ -1,0 +1,7 @@
+{
+  "className": "UIPageLayout",
+  "properties": {
+    "SortOrder": "LayoutOrder"
+  },
+  "ignoreUnknownInstances": true
+}

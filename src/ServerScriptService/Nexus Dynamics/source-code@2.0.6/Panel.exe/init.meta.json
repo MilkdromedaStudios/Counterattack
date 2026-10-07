@@ -1,0 +1,10 @@
+{
+  "className": "UIPageLayout",
+  "properties": {
+    "EasingDirection": "InOut",
+    "EasingStyle": "Cubic",
+    "SortOrder": "LayoutOrder",
+    "TweenTime": 0.2
+  },
+  "ignoreUnknownInstances": true
+}

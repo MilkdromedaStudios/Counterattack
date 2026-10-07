@@ -1,0 +1,37 @@
+{
+  "className": "Part",
+  "properties": {
+    "Anchored": true,
+    "BackSurface": "Weld",
+    "CFrame": [
+      -1407.8486,
+      159.5792,
+      269.3499,
+      -1.0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      -1
+    ],
+    "Color": [
+      27,
+      42,
+      53
+    ],
+    "FormFactor": "Plate",
+    "FrontSurface": "Weld",
+    "LeftSurface": "Weld",
+    "RightSurface": "Weld",
+    "Size": [
+      10,
+      0.4,
+      1
+    ],
+    "TopSurface": "Smooth"
+  },
+  "ignoreUnknownInstances": true
+}
