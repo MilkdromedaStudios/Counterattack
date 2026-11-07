@@ -1,74 +1,17 @@
 {
   "name": "Dysymmetrical",
-  "globIgnorePaths": [
-    "src/Workspace/Models",
-    "src/ServerStorage/Models",
-    "src/ReplicatedStorage/Models"
-  ],
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
-      "$path": "src/ReplicatedStorage",
       "$ignoreUnknownInstances": true,
-      "Packages": {
-        "$path": "Packages"
-      },
-      "RojoModels": {
-        "$path": "src/ReplicatedStorage/Models",
-        "$ignoreUnknownInstances": false
+      "Assets": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "Characters": {
+          "$path": "src/ReplicatedStorage/Assets/Characters",
+          "$ignoreUnknownInstances": true
+        }
       }
-    },
-    "ReplicatedFirst": {
-      "$path": "src/ReplicatedFirst",
-      "$ignoreUnknownInstances": true
-    },
-    "ServerScriptService": {
-      "$path": "src/ServerScriptService",
-      "$ignoreUnknownInstances": true
-    },
-    "ServerStorage": {
-      "$path": "src/ServerStorage",
-      "$ignoreUnknownInstances": true,
-      "RojoModels": {
-        "$path": "src/ServerStorage/Models",
-        "$ignoreUnknownInstances": false
-      }
-    },
-    "StarterPlayer": {
-      "$className": "StarterPlayer",
-      "$ignoreUnknownInstances": true,
-      "StarterPlayerScripts": {
-        "$path": "src/StarterPlayerScripts",
-        "$ignoreUnknownInstances": true
-      },
-      "StarterCharacterScripts": {
-        "$path": "src/StarterCharacterScripts",
-        "$ignoreUnknownInstances": true
-      }
-    },
-    "StarterGui": {
-      "$path": "src/StarterGui",
-      "$ignoreUnknownInstances": true
-    },
-    "Workspace": {
-      "$path": "src/Workspace",
-      "$ignoreUnknownInstances": true,
-      "RojoModels": {
-        "$path": "src/Workspace/Models",
-        "$ignoreUnknownInstances": false
-      }
-    },
-    "Lighting": {
-      "$path": "src/Lighting",
-      "$ignoreUnknownInstances": true
-    },
-    "SoundService": {
-      "$path": "src/SoundService",
-      "$ignoreUnknownInstances": true
-    },
-    "Players": {
-      "$className": "Players",
-      "$ignoreUnknownInstances": true
     }
   }
 }

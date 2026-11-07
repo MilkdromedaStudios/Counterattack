@@ -5,7 +5,8 @@
 
 For every character module, looks for ReplicatedStorage.Assets.Characters.<Role>.<Name>
 (or the ServerStorage fallback) in the built place and runs the R6 rig check on it.
-Exit 0 only if every rig is present and passes.
+A rig must load as-is: nothing repairs it at runtime, so one that still needs a repair
+is reported as BAKE (run tools/bake-rigs.py). Exit 0 only if every rig is present and passes.
 """
 import importlib.util
 import os
@@ -22,8 +23,13 @@ def load(mod, file):
 
 
 ins = load("inspect_rbxm", "inspect-rbxm.py")
-LEAVE_ALONE = {"Ravel", "Scrapheap"}  # matches CharacterRigFixes.server.luau
+LEAVE_ALONE = {"Ravel", "Scrapheap"}  # hand-built; matches tools/bake-rigs.py
 fr = load("fetch_rigs", "fetch-rigs.py")
+# Children the character code indexes on the rig (baked in by tools/bake-rigs.py).
+EXPECT = {
+    "Commander": ["Grenade", "Deagle/FirePart/Burst", "Deagle/FirePart/Front",
+                  "Deagle/FirePart/Smoke", "Deagle/FirePart/Flash"],
+}
 
 
 def find(root, dotted):
@@ -55,11 +61,11 @@ def main():
             ok = False
             print(f"{name:<15} MISSING  {path}")
             continue
-        st, how = ins.repair_status(node, insts, fr.EXPECT.get(name, []), name)
+        st, how = ins.repair_status(node, insts, fr.EXPECT.get(name, []) + EXPECT.get(name, []), name)
         if name in LEAVE_ALONE and st != "ok":
             st, how = "LEFT", "left as-is on request (spawns as placeholder)"
-        label = {"ok": "OK", "repairable": "REPAIR", "unusable": "BROKEN", "LEFT": "LEFT"}[st]
-        ok &= st in ("ok", "repairable", "LEFT")
+        label = {"ok": "OK", "repairable": "BAKE", "unusable": "BROKEN", "LEFT": "LEFT"}[st]
+        ok &= st in ("ok", "LEFT")
         print(f"{name:<15} {label:<8} {path}" + (f"  <- {how}" if how else ""))
     return 0 if ok else 1
 

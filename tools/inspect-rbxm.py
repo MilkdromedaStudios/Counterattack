@@ -366,7 +366,7 @@ def usable_root(m):
 
 
 def repair_status(model, insts, expect=(), rig_name=None):
-    """Mirror of src/ServerScriptService/CharacterRigFixes.server.luau.
+    """Mirror of the repairs tools/bake-rigs.py applies (ported from CharacterRigFixes.server.luau).
 
     Returns (status, detail): status is "ok", "repairable" or "unusable"."""
     probs, _ = rig_check(model, insts, expect)
@@ -468,7 +468,7 @@ def main():
             r = out["rig"]
             print("  RIG: " + ("OK (R6-compatible)" if not r["problems"] else "PROBLEMS"))
             if r["problems"] and r.get("repair") == "repairable":
-                print("    -> fixable at runtime by CharacterRigFixes: " + r["repair_detail"])
+                print("    -> fixable by tools/bake-rigs.py: " + r["repair_detail"])
             for p in r["problems"]:
                 print("    x " + p)
             for n in r["notes"]:
