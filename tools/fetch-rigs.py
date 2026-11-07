@@ -29,7 +29,7 @@ CHARS = os.path.join(ROOT, "src", "ReplicatedStorage", "Characters")
 RIGS = os.path.join(ROOT, "src", "ReplicatedStorage", "Assets", "Characters")
 ROLE_DIRS = {"Killers": "Killer", "Survivors": "Survivor"}
 # Extra children a specific character's code indexes on the rig.
-EXPECT = {}  # Commander's Grenade/Deagle are added at runtime by CharacterRigFixes.server.luau
+EXPECT = {}  # Commander's Grenade/Deagle are baked in by tools/bake-rigs.py
 # Other names a character is published under: used for both searching and title matching.
 ALIASES = {
     "FreddyFazbear": ["Freddy", "FNAF Freddy"],
@@ -108,7 +108,7 @@ def main():
     ap.add_argument("--report", default=None)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--allow-repair", action="store_true",
-                    help="accept rigs CharacterRigFixes.server.luau can repair at runtime when no clean rig exists")
+                    help="accept rigs tools/bake-rigs.py can repair when no clean rig exists (run it after installing)")
     ap.add_argument("--exclude-ids", default="", help="comma-separated asset IDs never to pick")
     a = ap.parse_args()
     q = os.path.abspath(a.quarantine)
@@ -186,7 +186,7 @@ def main():
                 c["result"] = "compatible, has scripts (unflagged)"
                 best_scripted = best_scripted or (r, path)
             elif probs:
-                c["result"] = "repairable at runtime: " + c["repair"][1]
+                c["result"] = "repairable by tools/bake-rigs.py: " + c["repair"][1]
                 best_repair = best_repair or (r, path, c["repair"][1])
             else:
                 c["result"] = "compatible, no scripts"
@@ -207,6 +207,8 @@ def main():
             entry["status"] = "installed"
             entry["picked"] = pick[0]
             print(f"[{name}] -> installed {pick[0]['id']} at {entry['target']}", flush=True)
+            if entry.get("runtime_repair"):
+                print(f"[{name}]    needs repair: run tools/bake-rigs.py {name}", flush=True)
         elif not a.dry_run:
             entry["status"] = "no-compatible-rig"
             print(f"[{name}] no compatible rig among {len(entry['candidates'])} candidates", flush=True)

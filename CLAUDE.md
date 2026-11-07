@@ -1,26 +1,30 @@
 # Working in this repo
 
-Rojo project developed on a Raspberry Pi — **there is no Roblox Studio here.** Models from
-the Creator Store are added with the scripts in `tools/` and synced by Rojo.
+Rojo project developed on a Raspberry Pi — **there is no Roblox Studio here.** Character
+models from the Creator Store are added with the scripts in `tools/` and synced by Rojo.
 
 `ROBLOX_API_KEY` (Open Cloud) is in the environment. **Never print it, echo it, log it, put
 it on a command line, or write it to a file.** The tools pass it to curl on stdin.
 
-## Where models go
+## What Rojo syncs: character models only
 
-| Instance path | Folder on disk | Rojo owns it? |
-|---|---|---|
-| `Workspace.RojoModels` | `src/Workspace/Models` | Yes, fully synced |
-| `ServerStorage.RojoModels` | `src/ServerStorage/Models` | Yes, fully synced |
-| `ReplicatedStorage.RojoModels` | `src/ReplicatedStorage/Models` | Yes, fully synced |
+`default.project.json` maps exactly one folder. `rojo serve` and `rojo build` touch nothing else.
 
-Every service has `$ignoreUnknownInstances: true`, so anything hand-placed in Studio survives
-a sync. The three `Models` folders are excluded from their parent's directory scan
-(`globIgnorePaths`) so they appear only once, as `RojoModels`. They are kept in git with
-`.gitkeep`; Rojo fails to build if one is missing.
+| Instance path | Folder on disk |
+|---|---|
+| `ReplicatedStorage.Assets.Characters.Killer.<Name>` | `src/ReplicatedStorage/Assets/Characters/Killer/<Name>.rbxm` |
+| `ReplicatedStorage.Assets.Characters.Survivor.<Name>` | `src/ReplicatedStorage/Assets/Characters/Survivor/<Name>.rbxm` |
 
-Character rigs are the exception: they go where the game code looks them up
-(`ReplicatedStorage.Assets.Characters.Killer.<Name>`, see `RIG_SETUP.md`), only when asked.
+`ReplicatedStorage`, `Assets` and `Characters` all have `$ignoreUnknownInstances: true`, so
+everything else in the place (scripts, maps, UI, other assets) is left exactly as it is in
+Studio. The rest of `src/` is not synced. `pack.project.json` still maps the whole game.
+`src/*/Models` are no longer mapped.
+
+Every rig must **load as-is**: a classic R6 body with Humanoid (RigType R6),
+HumanoidRootPart (also the PrimaryPart) and the six Motor6Ds in the root of the model. Nothing
+repairs rigs at runtime any more (`CharacterRigFixes.server.luau` is not synced). After adding
+a rig, run `tools/bake-rigs.py` and then `tools/verify-rigs.py`.
+Ravel and Scrapheap are hand-built: leave them alone.
 
 ## Adding a model
 
@@ -28,11 +32,12 @@ Character rigs are the exception: they go where the game code looks them up
    verified, and script count.
 2. **Show the top options and wait for the user's pick.** Prefer verified creators and
    Roblox. Mention unverified creators and models that contain scripts.
-3. **Download** into the right folder: `tools/fetch-model.sh <assetId> src/<Service>/Models/<Name>.rbxm`.
+3. **Download** into the right folder: `tools/fetch-model.sh <assetId> src/ReplicatedStorage/Assets/Characters/<Role>/<Name>.rbxm`.
    The file name becomes the instance name, so match it exactly, including case.
 4. **Audit** (below), then **wait for approval** before keeping it. If the user rejects it,
    delete the file.
-5. Confirm it builds: `rojo build -o /tmp/x.rbxl` (delete the output afterwards).
+5. Bake and verify: `tools/bake-rigs.py <Name>`, then `rojo build -o /tmp/x.rbxl &&
+   tools/verify-rigs.py /tmp/x.rbxl` (delete the output afterwards).
 
 ## Script audit after every download
 
@@ -52,10 +57,12 @@ Do not keep the model until the user approves the audit.
 
 ## Hard rules
 
-- **Never edit `.rbxm` files by hand.** Position and configure models from Luau scripts
-  (`PivotTo`, `SetAttribute`, adding missing children at runtime).
-- **Never touch anything outside the `RojoModels` folders unless the user asks.** That
-  includes `default.project.json` mappings and existing scripts.
+- **Never edit `.rbxm` files by hand.** The only sanctioned rewrite is
+  `tools/bake-rigs.py`. It has Rojo convert the file to XML, edits the instance tree, and
+  has Rojo write a fresh .rbxm.
+- **Never sync anything but character models, and never touch files outside
+  `src/ReplicatedStorage/Assets/Characters` unless the user asks.** That includes
+  `default.project.json` mappings and existing scripts.
 - Show a diff before changing `default.project.json`.
 
 ## Toolchain
@@ -64,7 +71,11 @@ Do not keep the model until the user approves the audit.
   and lists every script, flagging suspicious ones. Use it for the audit.
 - `tools/fetch-rigs.py --quarantine <dir outside src>`: finds, downloads and audits a rig for
   every character module that has none. Installs the first compatible one.
-- `tools/verify-rigs.py test.rbxl`: confirms every character path exists in a built place.
+- `tools/bake-rigs.py [--check] [Name ...]`: builds the rig repairs into the .rbxm (unwrap a
+  nested rig, rebuild Humanoid/HumanoidRootPart/Motor6Ds keeping the pose, Commander's
+  Grenade and Deagle). Rigs that already pass are not rewritten.
+- `tools/verify-rigs.py test.rbxl`: confirms every character path in a built place holds a rig
+  that loads as-is.
 
 `rojo` 7.7.0 and `jq` live in `~/.local/bin` (Rojo version pinned in `rokit.toml`).
 Text files use CRLF line endings; keep them.
