@@ -75,7 +75,10 @@ Do not keep the model until the user approves the audit.
   nested rig, convert an R15 body to R6, rebuild Humanoid/HumanoidRootPart/Motor6Ds keeping
   the pose, Commander's Grenade and Deagle). Rigs that already pass are not rewritten.
   R15 conversion adds invisible R6 limbs sized to the R15 parts, welds the R15 parts onto
-  them (renamed `Body_<Name>`), and removes a stock root `Animate` script.
+  them (renamed `Body_<Name>`), and removes a stock root `Animate` script. A rig with a
+  non-standard body gets the same conversion from its `CUSTOM_BODIES` entry, which names the
+  children that make up each R6 limb (Fog is one). T-posed arms are lowered about the
+  shoulder, and shoulder/hip joints go where the body's real joints are.
 - `tools/verify-rigs.py test.rbxl`: confirms every character path in a built place holds a rig
   that loads as-is.
 
