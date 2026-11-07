@@ -22,6 +22,7 @@ def load(mod, file):
 
 
 ins = load("inspect_rbxm", "inspect-rbxm.py")
+LEAVE_ALONE = {"Ravel", "Scrapheap"}  # matches CharacterRigFixes.server.luau
 fr = load("fetch_rigs", "fetch-rigs.py")
 
 
@@ -54,9 +55,12 @@ def main():
             ok = False
             print(f"{name:<15} MISSING  {path}")
             continue
-        probs, _ = ins.rig_check(node, insts, fr.EXPECT.get(name, []))
-        ok &= not probs
-        print(f"{name:<15} {'OK' if not probs else 'BROKEN':<8} {path}" + ("" if not probs else "  <- " + "; ".join(probs)))
+        st, how = ins.repair_status(node, insts, fr.EXPECT.get(name, []), name)
+        if name in LEAVE_ALONE and st != "ok":
+            st, how = "LEFT", "left as-is on request (spawns as placeholder)"
+        label = {"ok": "OK", "repairable": "REPAIR", "unusable": "BROKEN", "LEFT": "LEFT"}[st]
+        ok &= st in ("ok", "repairable", "LEFT")
+        print(f"{name:<15} {label:<8} {path}" + (f"  <- {how}" if how else ""))
     return 0 if ok else 1
 
 

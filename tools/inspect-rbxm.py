@@ -260,8 +260,29 @@ SUSPICIOUS = [
     (r"string\.char\s*\(|\\x[0-9a-fA-F]{2}|(\\\d{2,3}){8,}", "byte-escape / string.char obfuscation"),
     (r"[A-Za-z0-9+/]{200,}={0,2}", "long base64-like blob"),
     (r"\bServerScriptService\b|\bServerStorage\b", "reaches into server services"),
-    (r"\bgame\s*:\s*GetService\s*\(\s*[\"']Players[\"']\s*\)\s*:\s*ClearAllChildren|:Destroy\(\)\s*end\s*end", "mass destroy pattern"),
+    (r":\s*ClearAllChildren\s*\(", "ClearAllChildren"),
+    (r"\bIsStudio\s*\(", "behaves differently in Studio (common backdoor trick)"),
+    (r"PlayerGui|StarterGui|ScreenGui", "builds or injects GUI"),
+    (r"\bRemoteEvent\b|\bRemoteFunction\b|OnServerEvent|OnServerInvoke", "creates/uses remotes"),
 ]
+
+# Containers a character rig's scripts can legitimately sit in.
+NORMAL_SCRIPT_PARENTS = {"Model", "Folder", "Humanoid", "Configuration", "Tool", "Accessory"}
+
+
+def odd_place(s):
+    p = s.parent
+    if p is None:
+        return None
+    if p.cls in SCRIPT_CLASSES:
+        return f"nested inside another script ({p.name})"
+    if p.cls not in NORMAL_SCRIPT_PARENTS:
+        return f"hidden inside a {p.cls}"
+    depth = 0
+    while p is not None:
+        depth += 1
+        p = p.parent
+    return "buried deep in the hierarchy" if depth > 4 else None
 
 
 def scan_source(src):
@@ -330,6 +351,50 @@ def rig_check(model, insts, expect):
     return problems, notes
 
 
+R6_PARTS = ["Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg"]
+BASEPART_CLASSES = {"Part", "MeshPart", "UnionOperation", "WedgePart", "CornerWedgePart",
+                    "TrussPart", "SpawnLocation", "Seat", "VehicleSeat", "NegateOperation"}
+
+
+def has_r6_body(m):
+    return all((c := m.child(n)) is not None and c.cls in BASEPART_CLASSES for n in R6_PARTS) \
+        and m.child("UpperTorso") is None
+
+
+def usable_root(m):
+    return any(c.cls == "Humanoid" for c in m.children) and m.child("HumanoidRootPart") is not None
+
+
+def repair_status(model, insts, expect=(), rig_name=None):
+    """Mirror of src/ServerScriptService/CharacterRigFixes.server.luau.
+
+    Returns (status, detail): status is "ok", "repairable" or "unusable"."""
+    probs, _ = rig_check(model, insts, expect)
+    if not probs:
+        return "ok", ""
+    target, how = model, []
+    if model.cls == "Model" and not (usable_root(model) or has_r6_body(model)):
+        # same preference order as the Luau unwrap(): named like the file, then working, then any body
+        nested = [d for d in model.descendants()
+                  if d.cls == "Model" and (usable_root(d) or has_r6_body(d))]
+        want = (rig_name or model.name).lower()
+        target = (next((d for d in nested if d.name.lower() == want), None)
+                  or next((d for d in nested if usable_root(d)), None)
+                  or (nested[0] if nested else None))
+        if target is None:
+            return "unusable", "; ".join(probs[:3])
+        how.append(f"unwrap nested rig '{target.path()}'")
+    if target.cls == "Model" and has_r6_body(target):
+        p2, _ = rig_check(target, insts, expect)
+        if p2:
+            how.append("rebuild R6 Humanoid/HumanoidRootPart/joints")
+        return "repairable", "; ".join(how)
+    p2, _ = rig_check(target, insts, expect)
+    if not p2:
+        return "repairable", "; ".join(how)
+    return "unusable", "; ".join(p2[:3])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("file")
@@ -339,6 +404,7 @@ def main():
     ap.add_argument("--dump-scripts")
     ap.add_argument("--expect", action="append", default=[])
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--rig-name", help="instance name the rig will have (its file name)")
     a = ap.parse_args()
     if not (a.tree or a.rig or a.scripts or a.dump_scripts):
         a.rig = a.scripts = True
@@ -366,7 +432,9 @@ def main():
             out["rig"] = {"problems": [f"{len(roots)} root instances, expected exactly 1 Model"], "notes": []}
         else:
             p, n = rig_check(model, insts, a.expect)
-            out["rig"] = {"problems": p, "notes": n, "rootName": model.name}
+            st, how = repair_status(model, insts, a.expect, a.rig_name)
+            out["rig"] = {"problems": p, "notes": n, "rootName": model.name,
+                          "repair": st, "repair_detail": how}
         bad |= bool(out["rig"]["problems"])
 
     scripts = [i for i in insts.values() if i.cls in SCRIPT_CLASSES]
@@ -377,6 +445,9 @@ def main():
             flags = scan_source(src)
             if s.props.get("LinkedSource"):
                 flags.append("LinkedSource set (code loaded from elsewhere)")
+            where = odd_place(s)
+            if where:
+                flags.append("script " + where)
             rows.append({"class": s.cls, "path": s.path(), "bytes": len(src.encode()),
                          "lines": src.count("\n") + 1 if src else 0,
                          "disabled": s.props.get("Disabled", False), "flags": flags})
@@ -396,6 +467,8 @@ def main():
         if "rig" in out:
             r = out["rig"]
             print("  RIG: " + ("OK (R6-compatible)" if not r["problems"] else "PROBLEMS"))
+            if r["problems"] and r.get("repair") == "repairable":
+                print("    -> fixable at runtime by CharacterRigFixes: " + r["repair_detail"])
             for p in r["problems"]:
                 print("    x " + p)
             for n in r["notes"]:
