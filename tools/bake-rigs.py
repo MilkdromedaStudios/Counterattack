@@ -19,6 +19,8 @@ part of what gets synced. This tool applies the exact same repairs offline inste
      replaces (UpperTorso+LowerTorso, UpperArm+LowerArm+Hand, UpperLeg+LowerLeg+Foot);
      the R15 parts are renamed Body_<Name>, made massless and non-colliding, and
      welded onto them, and the R15 joints are removed. The R15 Head stays the Head.
+     Non-standard rigs listed in CUSTOM_BODIES get the same treatment, with the
+     parts of each limb named there.
      A stock `Animate` script in the root is removed (the game ships its own).
      Step 2 then adds the Humanoid/HumanoidRootPart/Motor6Ds;
   4. Commander only: the Grenade part and the Deagle model with FirePart and its four
@@ -63,6 +65,20 @@ R15_GROUPS = {
     "Right Leg": ["RightUpperLeg", "RightLowerLeg", "RightFoot"],
 }
 R15_PARTS = [n for group in R15_GROUPS.values() for n in group]
+# Non-standard rigs: which children of the rig make up each R6 limb (see convert_body).
+CUSTOM_BODIES = {
+    # 16326616262 "The Man In The Fog Rig": R15-style torso, limbs grouped in models
+    ("Killer", "Fog"): {
+        "groups": {
+            "Torso": ["UpperTorso", "LowerTorso", "Neck"],
+            "Left Arm": ["LeftArm"],
+            "Right Arm": ["RightArm"],
+            "Left Leg": ["LeftLeg"],
+            "Right Leg": ["RightLeg"],
+        },
+        "remove": ["ThumbNail DELETE", "ThumbnailCamera"],  # upload's thumbnail props
+    },
+}
 
 
 # ------------------------------------------------------------------ CFrame math
@@ -114,6 +130,7 @@ class Tree:
         self.by_ref = {i.get("referent"): i for i in self.root_el.iter("Item")}
         self.counter = 0
         self.changes = []
+        self.joint_points = {}  # Motor6D name -> world pivot, set by convert_body
 
     # instance helpers
     def props(self, item):
@@ -321,19 +338,50 @@ def ensure_motor(t, rig, parent, name, part0, part1, joint_world):
 
 def convert_r15(t, rig):
     """Give an R15 body an invisible R6 skeleton and weld the R15 parts onto it."""
-    if not has_r15_body(t, rig):
+    if has_r15_body(t, rig):
+        convert_body(t, rig, R15_GROUPS, (), "R15 body")
+
+
+def convert_custom(t, rig, role, name):
+    """Same conversion for a non-standard rig, using its entry in CUSTOM_BODIES."""
+    spec = CUSTOM_BODIES.get((role, name))
+    if spec and t.child(rig, "Torso") is None:
+        convert_body(t, rig, spec["groups"], spec.get("remove", ()), "custom body")
+
+
+def convert_body(t, rig, groups, remove, label):
+    """Weld a body onto an invisible R6 skeleton.
+
+    `groups` maps each R6 limb to children of the rig (parts or models); every BasePart
+    in them (the child itself and all its descendants) is welded to that limb. The Head
+    stays the Head and keeps its own sub-parts, welded to it. Joints between body parts
+    are removed, so the body moves only through the R6 Motor6Ds that repair_r6 adds."""
+    head = t.child(rig, "Head")
+    nodes = {limb: [t.child(rig, n) for n in names] for limb, names in groups.items()}
+    if not t.is_basepart(head) or any(n is None for ns in nodes.values() for n in ns):
         return
-    t.changes.append("converted R15 body to R6")
+    t.changes.append(f"converted {label} to R6")
+    for n in remove:
+        c = t.child(rig, n)
+        if c is not None:
+            t.destroy(c)
+            t.changes.append(f"removed '{n}'")
+
+    def baseparts(node):
+        return [d for d in [node, *t.descendants(node)] if t.is_basepart(d)]
+
+    parts = {limb: [p for n in ns for p in baseparts(n)] for limb, ns in nodes.items()}
+    head_parts = [p for p in t.descendants(head) if t.is_basepart(p)]
     hrp = t.child(rig, "HumanoidRootPart")
-    facing = t.get_cf(hrp if t.is_basepart(hrp) else t.child(rig, "LowerTorso"))[1]
+    facing_from = hrp if t.is_basepart(hrp) else parts["Torso"][-1]
+    facing = t.get_cf(facing_from)[1]
     rot_t = [[facing[j][i] for j in range(3)] for i in range(3)]  # world -> facing frame
 
-    r15 = {n: t.child(rig, n) for n in R15_PARTS}
-    body = set(r15.values()) | {t.child(rig, "Head")}
+    body = {p for ps in parts.values() for p in ps} | set(head_parts) | {head}
     if t.is_basepart(hrp):
         body.add(hrp)
 
-    # The R15 joints go; accessory welds (to parts outside the body) stay.
+    # Joints inside the body go; accessory welds (to parts outside the body) stay.
     for j in list(t.descendants(rig)):
         if t.cls(j) not in JOINTS or j.get("referent") not in t.by_ref:
             continue
@@ -343,11 +391,11 @@ def convert_r15(t, rig):
                 t.destroy(j)
                 break
 
-    boxes = {}
-    for limb, names in R15_GROUPS.items():
+    def box(ps):
+        """Bounding box of the parts, in the facing frame."""
         lo, hi = [math.inf] * 3, [-math.inf] * 3
-        for n in names:
-            (pos, rot), size = t.get_cf(r15[n]), t.get_size(r15[n])
+        for vis in ps:
+            (pos, rot), size = t.get_cf(vis), t.get_size(vis)
             for sx in (-0.5, 0.5):
                 for sy in (-0.5, 0.5):
                     for sz in (-0.5, 0.5):
@@ -356,7 +404,38 @@ def convert_r15(t, rig):
                         l = [sum(rot_t[i][k] * w[k] for k in range(3)) for i in range(3)]
                         lo = [min(a, b) for a, b in zip(lo, l)]
                         hi = [max(a, b) for a, b in zip(hi, l)]
-        boxes[limb] = (lo, hi)
+        return lo, hi
+
+    boxes = {limb: box(ps) for limb, ps in parts.items()}
+
+    def centre(vis):
+        """A part's centre, in the facing frame."""
+        pos = t.get_cf(vis)[0]
+        return [sum(rot_t[i][k] * pos[k] for k in range(3)) for i in range(3)]
+
+    # R6 animations expect arms hanging at the sides. An arm stored in a T-pose (wider
+    # than it is tall) is swung down about its shoulder (the end nearest the torso), by
+    # 90 degrees, or less if a long arm would otherwise reach below the soles of the feet.
+    sole = min(boxes["Left Leg"][0][1], boxes["Right Leg"][0][1])
+    for limb, sign in (("Left Arm", 1), ("Right Arm", -1)):
+        lo, hi = boxes[limb]
+        if hi[0] - lo[0] <= hi[1] - lo[1]:
+            continue
+        shoulder_x = hi[0] if sign == 1 else lo[0]
+        # height and depth of the part nearest the torso (the upper arm), not of the
+        # whole box, which hands and claws stretch
+        upper = centre(min(parts[limb], key=lambda v: abs(centre(v)[0] - shoulder_x)))
+        pivot_l = [shoulder_x, upper[1], upper[2]]
+        reach = (hi[0] - lo[0]) + (hi[1] - lo[1]) / 2
+        drop = max(pivot_l[1] - sole - 0.3, 0.0)
+        angle = math.asin(min(drop / reach, 1.0))
+        pivot = ([sum(facing[i][k] * pivot_l[k] for k in range(3)) for i in range(3)], facing)
+        swing = cf_mul(cf_mul(pivot, angles(0, 0, sign * angle)), cf_inv(pivot))
+        for vis in parts[limb]:
+            t.set_cf(vis, "CFrame", cf_mul(swing, t.get_cf(vis)))
+        boxes[limb] = box(parts[limb])
+        t.joint_points[{"Left Arm": "Left Shoulder", "Right Arm": "Right Shoulder"}[limb]] = pivot[0]
+        t.changes.append(f"lowered T-posed {limb} by {math.degrees(angle):.0f} degrees")
     # Stock R6 geometry: each leg runs from the bottom of the Torso to the sole of the
     # foot. An R6 Humanoid stands at leg height + half the root part's height, so this
     # puts the feet on the ground (R15 upper legs usually start inside the torso).
@@ -364,7 +443,35 @@ def convert_r15(t, rig):
     for leg in ("Left Leg", "Right Leg"):
         boxes[leg][1][1] = torso_bottom
 
-    for limb, names in R15_GROUPS.items():
+    # Joints go where this body's shoulders and hips really are, not at the stock R6
+    # offsets from the Torso: a hip at the top centre of the leg, a shoulder at the
+    # inner top of a hanging arm (a quarter of the way down, as on a stock R6 arm).
+    def world(l):
+        return [sum(facing[i][k] * l[k] for k in range(3)) for i in range(3)]
+    # (x and depth come from the limb's topmost part: feet and claws stretch the box)
+    for leg, joint in (("Left Leg", "Left Hip"), ("Right Leg", "Right Hip")):
+        lo, hi = boxes[leg]
+        top = centre(max(parts[leg], key=lambda v: centre(v)[1]))
+        t.joint_points[joint] = world([top[0], hi[1], top[2]])
+    for arm, joint, inner in (("Left Arm", "Left Shoulder", 1), ("Right Arm", "Right Shoulder", 0)):
+        if joint in t.joint_points:
+            continue
+        lo, hi = boxes[arm]
+        top = centre(max(parts[arm], key=lambda v: centre(v)[1]))
+        x = hi[0] if inner else lo[0]
+        t.joint_points[joint] = world([x, hi[1] - (hi[1] - lo[1]) / 4, top[2]])
+
+    def attach(vis, to):
+        t.set_prop(vis, "bool", "Massless", "true")
+        t.set_prop(vis, "bool", "CanCollide", "false")
+        t.set_prop(vis, "bool", "Anchored", "false")
+        w = t.new("Weld", "R6Weld", vis)
+        t.set_ref(w, "Part0", to)
+        t.set_ref(w, "Part1", vis)
+        t.set_cf(w, "C0", cf_mul(cf_inv(t.get_cf(to)), t.get_cf(vis)))
+        t.set_cf(w, "C1", cf())
+
+    for limb, ps in parts.items():
         lo, hi = boxes[limb]
         centre_l = [(a + b) / 2 for a, b in zip(lo, hi)]
         centre = [sum(facing[i][k] * centre_l[k] for k in range(3)) for i in range(3)]
@@ -374,17 +481,13 @@ def convert_r15(t, rig):
         t.set_prop(part, "float", "Transparency", "1")
         t.set_prop(part, "bool", "Anchored", "false")
         t.set_prop(part, "bool", "CanCollide", "true" if limb == "Torso" else "false")
-        for n in names:
-            vis = r15[n]
-            t.set_prop(vis, "string", "Name", "Body_" + n)
-            t.set_prop(vis, "bool", "Massless", "true")
-            t.set_prop(vis, "bool", "CanCollide", "false")
-            t.set_prop(vis, "bool", "Anchored", "false")
-            w = t.new("Weld", "R6Weld", vis)
-            t.set_ref(w, "Part0", part)
-            t.set_ref(w, "Part1", vis)
-            t.set_cf(w, "C0", cf_mul(cf_inv(t.get_cf(part)), t.get_cf(vis)))
-            t.set_cf(w, "C1", cf())
+        for vis in ps:
+            attach(vis, part)
+        for n in nodes[limb]:
+            t.set_prop(n, "string", "Name", "Body_" + t.name(n))
+    for vis in head_parts:
+        attach(vis, head)
+    t.set_prop(head, "bool", "Anchored", "false")
 
     # The R6 HumanoidRootPart sits on the Torso, like a stock R6 rig.
     if t.is_basepart(hrp):
@@ -395,7 +498,7 @@ def convert_r15(t, rig):
         t.set_prop(hrp, "bool", "CanCollide", "false")
         t.set_prop(hrp, "bool", "Anchored", "false")
 
-    # R15 HipHeight is an absolute height; on R6 it is an extra offset on top of the legs.
+    # HipHeight is an absolute height on R15; on R6 it is an extra offset on top of the legs.
     for hum in t.children(rig):
         if t.cls(hum) == "Humanoid":
             t.set_prop(hum, "float", "HipHeight", "0")
@@ -441,12 +544,21 @@ def repair_r6(t, rig):
     tc = t.get_cf(torso)
     neck_rot = angles(r(-90), 0, r(180))
     right, left = angles(0, r(90), 0), angles(0, r(-90), 0)
+    def at(name, joint_world):
+        """Stock R6 joint, moved to the pivot convert_body measured, if any."""
+        point = t.joint_points.get(name)
+        return (list(point), joint_world[1]) if point else joint_world
+
     ensure_motor(t, rig, hrp, "RootJoint", hrp, torso, cf_mul(tc, neck_rot))
     ensure_motor(t, rig, torso, "Neck", torso, head, cf_mul(cf_mul(tc, cf(0, ty, 0)), neck_rot))
-    ensure_motor(t, rig, torso, "Right Shoulder", torso, ra, cf_mul(cf_mul(tc, cf(tx, ty / 2, 0)), right))
-    ensure_motor(t, rig, torso, "Left Shoulder", torso, la, cf_mul(cf_mul(tc, cf(-tx, ty / 2, 0)), left))
-    ensure_motor(t, rig, torso, "Right Hip", torso, rl, cf_mul(cf_mul(tc, cf(tx / 2, -ty, 0)), right))
-    ensure_motor(t, rig, torso, "Left Hip", torso, ll, cf_mul(cf_mul(tc, cf(-tx / 2, -ty, 0)), left))
+    ensure_motor(t, rig, torso, "Right Shoulder", torso, ra,
+                 at("Right Shoulder", cf_mul(cf_mul(tc, cf(tx, ty / 2, 0)), right)))
+    ensure_motor(t, rig, torso, "Left Shoulder", torso, la,
+                 at("Left Shoulder", cf_mul(cf_mul(tc, cf(-tx, ty / 2, 0)), left)))
+    ensure_motor(t, rig, torso, "Right Hip", torso, rl,
+                 at("Right Hip", cf_mul(cf_mul(tc, cf(tx / 2, -ty, 0)), right)))
+    ensure_motor(t, rig, torso, "Left Hip", torso, ll,
+                 at("Left Hip", cf_mul(cf_mul(tc, cf(-tx / 2, -ty, 0)), left)))
 
     if t.get_ref(rig, "PrimaryPart") is not hrp:
         t.set_ref(rig, "PrimaryPart", hrp)
@@ -584,6 +696,7 @@ def bake(role, path, check):
             return name, ["skipped: root is not a single Model"]
         rig = unwrap(t, roots[0], name)
         convert_r15(t, rig)
+        convert_custom(t, rig, role, name)
         repair_r6(t, rig)
         fix = ROLE_FIXES.get((role, name))
         if fix:
