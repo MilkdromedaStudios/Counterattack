@@ -361,6 +361,16 @@ def has_r6_body(m):
         and m.child("UpperTorso") is None
 
 
+R15_PARTS = ["UpperTorso", "LowerTorso", "LeftUpperArm", "LeftLowerArm", "LeftHand",
+             "RightUpperArm", "RightLowerArm", "RightHand", "LeftUpperLeg", "LeftLowerLeg",
+             "LeftFoot", "RightUpperLeg", "RightLowerLeg", "RightFoot"]
+
+
+def has_r15_body(m):
+    return m.child("Torso") is None and all(
+        (c := m.child(n)) is not None and c.cls in BASEPART_CLASSES for n in ["Head", *R15_PARTS])
+
+
 def usable_root(m):
     return any(c.cls == "Humanoid" for c in m.children) and m.child("HumanoidRootPart") is not None
 
@@ -373,10 +383,10 @@ def repair_status(model, insts, expect=(), rig_name=None):
     if not probs:
         return "ok", ""
     target, how = model, []
-    if model.cls == "Model" and not (usable_root(model) or has_r6_body(model)):
+    if model.cls == "Model" and not (usable_root(model) or has_r6_body(model) or has_r15_body(model)):
         # same preference order as the Luau unwrap(): named like the file, then working, then any body
         nested = [d for d in model.descendants()
-                  if d.cls == "Model" and (usable_root(d) or has_r6_body(d))]
+                  if d.cls == "Model" and (usable_root(d) or has_r6_body(d) or has_r15_body(d))]
         want = (rig_name or model.name).lower()
         target = (next((d for d in nested if d.name.lower() == want), None)
                   or next((d for d in nested if usable_root(d)), None)
@@ -384,6 +394,9 @@ def repair_status(model, insts, expect=(), rig_name=None):
         if target is None:
             return "unusable", "; ".join(probs[:3])
         how.append(f"unwrap nested rig '{target.path()}'")
+    if target.cls == "Model" and has_r15_body(target):
+        how.append("convert R15 body to R6 (invisible R6 skeleton, R15 parts welded on)")
+        return "repairable", "; ".join(how)
     if target.cls == "Model" and has_r6_body(target):
         p2, _ = rig_check(target, insts, expect)
         if p2:
