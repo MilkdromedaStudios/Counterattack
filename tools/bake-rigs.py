@@ -14,7 +14,14 @@ part of what gets synced. This tool applies the exact same repairs offline inste
      the six Motor6Ds (RootJoint, Neck, shoulders, hips) at the standard R6 positions,
      keeping the current pose and removing old welds that glued a limb to the Torso;
      PrimaryPart is set to the HumanoidRootPart;
-  3. Commander only: the Grenade part and the Deagle model with FirePart and its four
+  3. convert an R15 body to R6 (the game is R6-only: Animate exits on anything else).
+     Invisible R6 Torso, arms and legs are added, each sized to the R15 parts it
+     replaces (UpperTorso+LowerTorso, UpperArm+LowerArm+Hand, UpperLeg+LowerLeg+Foot);
+     the R15 parts are renamed Body_<Name>, made massless and non-colliding, and
+     welded onto them, and the R15 joints are removed. The R15 Head stays the Head.
+     A stock `Animate` script in the root is removed (the game ships its own).
+     Step 2 then adds the Humanoid/HumanoidRootPart/Motor6Ds;
+  4. Commander only: the Grenade part and the Deagle model with FirePart and its four
      ParticleEmitters (Burst, Front, Smoke, Flash) that Survivors/Commander.luau uses.
 
 The .rbxm is never patched byte by byte: Rojo converts it to XML, the XML is edited as
@@ -47,6 +54,15 @@ JOINTS = {"Weld", "Snap", "Glue", "ManualWeld", "ManualGlue", "Motor", "Motor6D"
           "Rotate", "RotateP", "RotateV", "VelocityMotor", "WeldConstraint"}
 REF_PAIRS = (("Part0", "Part1"), ("Part0Internal", "Part1Internal"))
 CF_KEYS = ["X", "Y", "Z", "R00", "R01", "R02", "R10", "R11", "R12", "R20", "R21", "R22"]
+# R6 limb -> the R15 parts it stands in for
+R15_GROUPS = {
+    "Torso": ["UpperTorso", "LowerTorso"],
+    "Left Arm": ["LeftUpperArm", "LeftLowerArm", "LeftHand"],
+    "Right Arm": ["RightUpperArm", "RightLowerArm", "RightHand"],
+    "Left Leg": ["LeftUpperLeg", "LeftLowerLeg", "LeftFoot"],
+    "Right Leg": ["RightUpperLeg", "RightLowerLeg", "RightFoot"],
+}
+R15_PARTS = [n for group in R15_GROUPS.values() for n in group]
 
 
 # ------------------------------------------------------------------ CFrame math
@@ -246,12 +262,17 @@ def usable_root(t, m):
     return any(t.cls(c) == "Humanoid" for c in t.children(m)) and t.child(m, "HumanoidRootPart") is not None
 
 
+def has_r15_body(t, m):
+    return (t.child(m, "Torso") is None and t.is_basepart(t.child(m, "Head"))
+            and all(t.is_basepart(t.child(m, n)) for n in R15_PARTS))
+
+
 def unwrap(t, rig, rig_name):
-    if usable_root(t, rig) or has_r6_body(t, rig):
+    if usable_root(t, rig) or has_r6_body(t, rig) or has_r15_body(t, rig):
         return rig
     named = working = body = None
     for d in t.descendants(rig):
-        if t.cls(d) == "Model" and (usable_root(t, d) or has_r6_body(t, d)):
+        if t.cls(d) == "Model" and (usable_root(t, d) or has_r6_body(t, d) or has_r15_body(t, d)):
             if named is None and t.name(d).lower() == rig_name.lower():
                 named = d
             if working is None and usable_root(t, d):
@@ -296,6 +317,93 @@ def ensure_motor(t, rig, parent, name, part0, part1, joint_world):
     t.set_cf(m, "C0", cf_mul(cf_inv(t.get_cf(part0)), joint_world))
     t.set_cf(m, "C1", cf_mul(cf_inv(t.get_cf(part1)), joint_world))
     t.changes.append(f"added Motor6D '{name}' ({t.name(part0)} -> {t.name(part1)})")
+
+
+def convert_r15(t, rig):
+    """Give an R15 body an invisible R6 skeleton and weld the R15 parts onto it."""
+    if not has_r15_body(t, rig):
+        return
+    t.changes.append("converted R15 body to R6")
+    hrp = t.child(rig, "HumanoidRootPart")
+    facing = t.get_cf(hrp if t.is_basepart(hrp) else t.child(rig, "LowerTorso"))[1]
+    rot_t = [[facing[j][i] for j in range(3)] for i in range(3)]  # world -> facing frame
+
+    r15 = {n: t.child(rig, n) for n in R15_PARTS}
+    body = set(r15.values()) | {t.child(rig, "Head")}
+    if t.is_basepart(hrp):
+        body.add(hrp)
+
+    # The R15 joints go; accessory welds (to parts outside the body) stay.
+    for j in list(t.descendants(rig)):
+        if t.cls(j) not in JOINTS or j.get("referent") not in t.by_ref:
+            continue
+        for n0, n1 in REF_PAIRS:
+            p0, p1 = t.get_ref(j, n0), t.get_ref(j, n1)
+            if p0 is not None and p1 is not None and p0 in body and p1 in body:
+                t.destroy(j)
+                break
+
+    boxes = {}
+    for limb, names in R15_GROUPS.items():
+        lo, hi = [math.inf] * 3, [-math.inf] * 3
+        for n in names:
+            (pos, rot), size = t.get_cf(r15[n]), t.get_size(r15[n])
+            for sx in (-0.5, 0.5):
+                for sy in (-0.5, 0.5):
+                    for sz in (-0.5, 0.5):
+                        off = (sx * size[0], sy * size[1], sz * size[2])
+                        w = [pos[i] + sum(rot[i][k] * off[k] for k in range(3)) for i in range(3)]
+                        l = [sum(rot_t[i][k] * w[k] for k in range(3)) for i in range(3)]
+                        lo = [min(a, b) for a, b in zip(lo, l)]
+                        hi = [max(a, b) for a, b in zip(hi, l)]
+        boxes[limb] = (lo, hi)
+    # Stock R6 geometry: each leg runs from the bottom of the Torso to the sole of the
+    # foot. An R6 Humanoid stands at leg height + half the root part's height, so this
+    # puts the feet on the ground (R15 upper legs usually start inside the torso).
+    torso_bottom = boxes["Torso"][0][1]
+    for leg in ("Left Leg", "Right Leg"):
+        boxes[leg][1][1] = torso_bottom
+
+    for limb, names in R15_GROUPS.items():
+        lo, hi = boxes[limb]
+        centre_l = [(a + b) / 2 for a, b in zip(lo, hi)]
+        centre = [sum(facing[i][k] * centre_l[k] for k in range(3)) for i in range(3)]
+        part = t.new("Part", limb, rig)
+        t.set_vec(part, "Vector3", "size", [max(b - a, 0.2) for a, b in zip(lo, hi)])
+        t.set_cf(part, "CFrame", (centre, facing))
+        t.set_prop(part, "float", "Transparency", "1")
+        t.set_prop(part, "bool", "Anchored", "false")
+        t.set_prop(part, "bool", "CanCollide", "true" if limb == "Torso" else "false")
+        for n in names:
+            vis = r15[n]
+            t.set_prop(vis, "string", "Name", "Body_" + n)
+            t.set_prop(vis, "bool", "Massless", "true")
+            t.set_prop(vis, "bool", "CanCollide", "false")
+            t.set_prop(vis, "bool", "Anchored", "false")
+            w = t.new("Weld", "R6Weld", vis)
+            t.set_ref(w, "Part0", part)
+            t.set_ref(w, "Part1", vis)
+            t.set_cf(w, "C0", cf_mul(cf_inv(t.get_cf(part)), t.get_cf(vis)))
+            t.set_cf(w, "C1", cf())
+
+    # The R6 HumanoidRootPart sits on the Torso, like a stock R6 rig.
+    if t.is_basepart(hrp):
+        torso = t.child(rig, "Torso")
+        sx, sy, sz = t.get_size(torso)
+        t.set_cf(hrp, "CFrame", t.get_cf(torso))
+        t.set_vec(hrp, "Vector3", "size", [sx, sy, max(sz, 1.0)])
+        t.set_prop(hrp, "bool", "CanCollide", "false")
+        t.set_prop(hrp, "bool", "Anchored", "false")
+
+    # R15 HipHeight is an absolute height; on R6 it is an extra offset on top of the legs.
+    for hum in t.children(rig):
+        if t.cls(hum) == "Humanoid":
+            t.set_prop(hum, "float", "HipHeight", "0")
+
+    for c in t.children(rig):
+        if t.cls(c) in ("LocalScript", "Script") and t.name(c) == "Animate":
+            t.destroy(c)
+            t.changes.append(f"removed stock {t.cls(c)} 'Animate' (the game ships its own)")
 
 
 def repair_r6(t, rig):
@@ -475,6 +583,7 @@ def bake(role, path, check):
         if len(roots) != 1 or t.cls(roots[0]) != "Model":
             return name, ["skipped: root is not a single Model"]
         rig = unwrap(t, roots[0], name)
+        convert_r15(t, rig)
         repair_r6(t, rig)
         fix = ROLE_FIXES.get((role, name))
         if fix:

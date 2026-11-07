@@ -72,8 +72,10 @@ Do not keep the model until the user approves the audit.
 - `tools/fetch-rigs.py --quarantine <dir outside src>`: finds, downloads and audits a rig for
   every character module that has none. Installs the first compatible one.
 - `tools/bake-rigs.py [--check] [Name ...]`: builds the rig repairs into the .rbxm (unwrap a
-  nested rig, rebuild Humanoid/HumanoidRootPart/Motor6Ds keeping the pose, Commander's
-  Grenade and Deagle). Rigs that already pass are not rewritten.
+  nested rig, convert an R15 body to R6, rebuild Humanoid/HumanoidRootPart/Motor6Ds keeping
+  the pose, Commander's Grenade and Deagle). Rigs that already pass are not rewritten.
+  R15 conversion adds invisible R6 limbs sized to the R15 parts, welds the R15 parts onto
+  them (renamed `Body_<Name>`), and removes a stock root `Animate` script.
 - `tools/verify-rigs.py test.rbxl`: confirms every character path in a built place holds a rig
   that loads as-is.
 
